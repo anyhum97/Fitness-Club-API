@@ -283,6 +283,7 @@ public class ChangeSeatsTests : ApiTestBase
     [DataRow("""{"seats":"2"x}""", DisplayName = "broken JSON")]
     [DataRow("""{"seats":"many"}""", DisplayName = "seats not a number")]
     [DataRow("""{"seats":2.5}""", DisplayName = "seats fractional")]
+    [DataRow("""{"seats":"3"}""", DisplayName = "seats as numeric string")]
     [DataRow("", DisplayName = "empty body")]
     public async Task InvalidBody_IsBadRequest(string body)
     {

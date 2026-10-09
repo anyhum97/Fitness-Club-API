@@ -263,6 +263,10 @@ public class CreateEnrollmentTests : ApiTestBase
     [DataRow("""{"classId":1,"seats":null}""", DisplayName = "seats null")]
     [DataRow("""{"classId":"abc","seats":1}""", DisplayName = "classId not a number")]
     [DataRow("""{"classId":1,"seats":"two"}""", DisplayName = "seats not a number")]
+    [DataRow("""{"classId":1,"seats":"2"}""", DisplayName = "seats as numeric string")]
+    [DataRow("""{"classId":"1","seats":1}""", DisplayName = "classId as numeric string")]
+    [DataRow("""{"classId":"1","seats":"1"}""", DisplayName = "both as numeric strings")]
+    [DataRow("""{"classId":1,"seats":"NaN"}""", DisplayName = "seats as NaN string")]
     [DataRow("""{"classId":1,"seats":1.5}""", DisplayName = "seats fractional")]
     [DataRow("""{"classId":1,"seats":true}""", DisplayName = "seats boolean")]
     [DataRow("""{"classId":9223372036854775808,"seats":1}""", DisplayName = "classId beyond long")]
@@ -279,6 +283,22 @@ public class CreateEnrollmentTests : ApiTestBase
         var response = await user.Client.PostRawAsync("/enrollments", body, ApiClient.NewKey());
 
         await ResponseAssert.StatusAsync(response, HttpStatusCode.BadRequest);
+        Assert.AreEqual(20, (await TestData.GetPassAsync(user.Id)).RemainingVisits);
+    }
+
+    [TestMethod]
+    public async Task Create_NumericStringIsRejectedLikeOtherValidationErrors()
+    {
+        var user = await TestData.CreateUserAsync();
+
+        var json = await ResponseAssert.StatusAsync(
+            await user.Client.PostRawAsync("/enrollments", """{"classId":1,"seats":"2"}""", ApiClient.NewKey()),
+            HttpStatusCode.BadRequest);
+
+        Assert.AreEqual(400, json.GetProperty("status").GetInt32());
+        Assert.IsTrue(json.TryGetProperty("title", out _));
+        Assert.IsTrue(json.TryGetProperty("traceId", out _));
+        Assert.IsTrue(json.GetProperty("errors").EnumerateObject().Any());
         Assert.AreEqual(20, (await TestData.GetPassAsync(user.Id)).RemainingVisits);
     }
 

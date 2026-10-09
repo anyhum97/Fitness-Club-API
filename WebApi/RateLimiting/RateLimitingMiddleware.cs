@@ -7,12 +7,20 @@ namespace WebApi.RateLimiting;
 
 public class RateLimitingMiddleware
 {
-    private const string IncrementScript = """
-        local count = redis.call('INCR', KEYS[1])
-        if count == 1 then
-            redis.call('EXPIRE', KEYS[1], ARGV[1])
+    private const string SlidingWindowScript = """
+        local key = KEYS[1]
+        local now = tonumber(ARGV[1])
+        local window = tonumber(ARGV[2])
+        local limit = tonumber(ARGV[3])
+        redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+        local count = redis.call('ZCARD', key)
+        if count < limit then
+            redis.call('ZADD', key, now, ARGV[4])
+            redis.call('PEXPIRE', key, window)
+            return { 1, count + 1, 0 }
         end
-        return count
+        local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+        return { 0, count, tonumber(oldest[2]) + window - now }
         """;
 
     private readonly RequestDelegate _next;
@@ -47,29 +55,31 @@ public class RateLimitingMiddleware
             return;
         }
 
-        var now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        var window = now / _options.WindowSeconds;
-        var key = $"rate-limit:{userId}:{window}";
+        var now = _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+        var windowMilliseconds = _options.WindowSeconds * 1000L;
 
-        var count = (long)await _redis.GetDatabase().ScriptEvaluateAsync(
-            IncrementScript,
-            [key],
-            [_options.WindowSeconds + 1]);
+        // решение: окно скользящее — считаются запросы за последние 60 секунд от текущего момента,
+        // поэтому на стыке календарных минут лимит не удваивается; отклонённые запросы окно не продлевают.
+        var result = (RedisResult[])(await _redis.GetDatabase().ScriptEvaluateAsync(
+            SlidingWindowScript,
+            [$"rate-limit:{userId}"],
+            [now, windowMilliseconds, _options.PermitLimit, Guid.NewGuid().ToString("N")]))!;
 
-        if (count <= _options.PermitLimit)
+        if ((long)result[0] == 1)
         {
             await _next(context);
 
             return;
         }
 
-        var retryAfter = (window + 1) * _options.WindowSeconds - now;
+        var retryAfter = Math.Max(1, (long)Math.Ceiling((long)result[2] / 1000.0));
 
         logger.LogWarning(
-            "Rate limit exceeded by user {UserId}: request {Count} of {PermitLimit} in the current window, "
-            + "retry after {RetryAfter} s",
+            "Rate limit exceeded by user {UserId}: {Count} requests in the last {WindowSeconds} s, "
+            + "limit {PermitLimit}, retry after {RetryAfter} s",
             userId,
-            count,
+            (long)result[1],
+            _options.WindowSeconds,
             _options.PermitLimit,
             retryAfter);
 

@@ -128,17 +128,25 @@ public class JoinWaitlistTests : ApiTestBase
     }
 
     [TestMethod]
-    [DataRow(4, 5, DisplayName = "capacity plus one")]
-    [DataRow(1, 100, DisplayName = "far beyond capacity")]
-    public async Task Join_RejectsMoreSeatsThanCapacity(int capacity, int seats)
+    [DataRow(4, 0, 5, DisplayName = "capacity plus one on an empty class")]
+    [DataRow(4, 4, 5, DisplayName = "capacity plus one on a full class")]
+    [DataRow(1, 1, 100, DisplayName = "far beyond capacity")]
+    public async Task Join_AcceptsMoreSeatsThanCapacityBecauseFreeSeatsAreFewer(int capacity, int booked, int seats)
     {
         var user = await TestData.CreateUserAsync();
         var scheduledClass = await TestData.CreateClassAsync(capacity: capacity);
-        await TestData.FillClassAsync(scheduledClass.Id, capacity);
 
-        await ResponseAssert.ConflictAsync(
+        if (booked > 0)
+        {
+            await TestData.FillClassAsync(scheduledClass.Id, booked);
+        }
+
+        var json = await ResponseAssert.StatusAsync(
             await user.Client.JoinWaitlistAsync(scheduledClass.Id, seats),
-            "seats-exceed-capacity");
+            HttpStatusCode.Created);
+
+        Assert.AreEqual(seats, json.GetProperty("seats").GetInt32());
+        Assert.AreEqual(1, json.GetProperty("position").GetInt32());
     }
 
     [TestMethod]
@@ -198,6 +206,8 @@ public class JoinWaitlistTests : ApiTestBase
     [DataRow("""{"seats":1}""", DisplayName = "classId missing")]
     [DataRow("""{"classId":"x","seats":1}""", DisplayName = "classId not a number")]
     [DataRow("""{"classId":1,"seats":1.25}""", DisplayName = "seats fractional")]
+    [DataRow("""{"classId":"1","seats":1}""", DisplayName = "classId as numeric string")]
+    [DataRow("""{"classId":1,"seats":"1"}""", DisplayName = "seats as numeric string")]
     [DataRow("""{"classId":1,""", DisplayName = "broken JSON")]
     [DataRow("", DisplayName = "empty body")]
     public async Task Join_RejectsInvalidBody(string body)

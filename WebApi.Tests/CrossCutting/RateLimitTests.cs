@@ -97,6 +97,80 @@ public class RateLimitTests : ApiTestBase
     }
 
     [TestMethod]
+    public async Task BurstAcrossMinuteBoundaryIsStillLimited()
+    {
+        var user = await TestData.CreateUserAsync();
+        var minuteStart = Now.AddTicks(-(Now.Ticks % TimeSpan.TicksPerMinute));
+        Clock.Advance(minuteStart.AddSeconds(58) - Now);
+
+        for (var i = 0; i < 30; i++)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, (await user.Client.GetAsync(ScheduleUrl)).StatusCode, $"request {i + 1}");
+        }
+
+        Clock.Advance(TimeSpan.FromSeconds(4));
+
+        for (var i = 30; i < 60; i++)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, (await user.Client.GetAsync(ScheduleUrl)).StatusCode, $"request {i + 1}");
+        }
+
+        var rejected = await user.Client.GetAsync(ScheduleUrl);
+
+        await ResponseAssert.ProblemAsync(rejected, HttpStatusCode.TooManyRequests);
+        Assert.AreEqual("56", rejected.Headers.GetValues("Retry-After").Single());
+    }
+
+    [TestMethod]
+    public async Task WindowSlidesAsOldRequestsExpire()
+    {
+        var user = await TestData.CreateUserAsync();
+
+        for (var i = 0; i < 30; i++)
+        {
+            await user.Client.GetAsync(ScheduleUrl);
+        }
+
+        Clock.Advance(TimeSpan.FromSeconds(30));
+
+        for (var i = 0; i < 30; i++)
+        {
+            await user.Client.GetAsync(ScheduleUrl);
+        }
+
+        Assert.AreEqual(HttpStatusCode.TooManyRequests, (await user.Client.GetAsync(ScheduleUrl)).StatusCode);
+
+        Clock.Advance(TimeSpan.FromSeconds(29));
+        Assert.AreEqual(HttpStatusCode.TooManyRequests, (await user.Client.GetAsync(ScheduleUrl)).StatusCode);
+
+        Clock.Advance(TimeSpan.FromSeconds(1));
+
+        for (var i = 0; i < 30; i++)
+        {
+            Assert.AreEqual(HttpStatusCode.OK, (await user.Client.GetAsync(ScheduleUrl)).StatusCode, $"request {i + 1}");
+        }
+
+        Assert.AreEqual(HttpStatusCode.TooManyRequests, (await user.Client.GetAsync(ScheduleUrl)).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task RejectedRequestsDoNotExtendTheBlock()
+    {
+        var user = await TestData.CreateUserAsync();
+        await ExhaustLimitAsync(user);
+
+        for (var i = 0; i < 20; i++)
+        {
+            Clock.Advance(TimeSpan.FromSeconds(1));
+            Assert.AreEqual(HttpStatusCode.TooManyRequests, (await user.Client.GetAsync(ScheduleUrl)).StatusCode);
+        }
+
+        Clock.Advance(TimeSpan.FromSeconds(40));
+
+        Assert.AreEqual(HttpStatusCode.OK, (await user.Client.GetAsync(ScheduleUrl)).StatusCode);
+    }
+
+    [TestMethod]
     public async Task UnauthenticatedRequestsAreNotCounted()
     {
         var anonymous = ApiClient.Anonymous();

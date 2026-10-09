@@ -18,8 +18,6 @@ public static class ConflictReason
 
     public const string AlreadyWaiting = "already-waiting";
 
-    public const string SeatsExceedCapacity = "seats-exceed-capacity";
-
     public const string WaitlistFulfilled = "waitlist-fulfilled";
 
     public const string IdempotencyKeyConflict = "idempotency-key-conflict";

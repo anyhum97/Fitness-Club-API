@@ -115,13 +115,6 @@ public class WaitlistService
             throw ApiException.Conflict(ConflictReason.AlreadyWaiting);
         }
 
-        // решение: запрос мест больше вместимости занятия никогда не будет удовлетворён, поэтому
-        // в очередь его не ставим — отдельная причина seats-exceed-capacity.
-        if (seats > lockedClass.Capacity)
-        {
-            throw ApiException.Conflict(ConflictReason.SeatsExceedCapacity);
-        }
-
         var freeSeats = lockedClass.Capacity - await _unitOfWork.Enrollment.SumActiveSeatsAsync(classId, ct);
 
         if (freeSeats >= seats)

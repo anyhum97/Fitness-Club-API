@@ -154,6 +154,30 @@ public class WaitlistPromotionTests : ApiTestBase
     }
 
     [TestMethod]
+    public async Task Promotion_SkipsEntryLargerThanCapacityForeverWithoutLosingSeats()
+    {
+        var scheduledClass = await TestData.CreateClassAsync(capacity: 3);
+        var holder = await TestData.CreateUserAsync(visits: 10);
+        var holderEnrollment = await holder.EnrollAsync(scheduledClass.Id, 3);
+        var huge = await TestData.CreateUserAsync(visits: 50);
+        var small = await TestData.CreateUserAsync(visits: 5);
+        var hugeEntry = await huge.JoinWaitlistAsync(scheduledClass.Id, 4);
+        Clock.Advance(TimeSpan.FromSeconds(1));
+        var smallEntry = await small.JoinWaitlistAsync(scheduledClass.Id, 2);
+
+        await holder.CancelAsync(holderEnrollment);
+
+        Assert.AreEqual(WaitlistStatus.Waiting, (await TestData.GetWaitlistEntryAsync(hugeEntry)).Status);
+        Assert.AreEqual(WaitlistStatus.Promoted, (await TestData.GetWaitlistEntryAsync(smallEntry)).Status);
+        Assert.AreEqual(50, (await TestData.GetPassAsync(huge.Id)).RemainingVisits);
+        Assert.AreEqual(2, await TestData.GetActiveSeatsAsync(scheduledClass.Id));
+
+        var newcomer = await TestData.CreateUserAsync();
+        await ResponseAssert.StatusAsync(await newcomer.Client.EnrollAsync(scheduledClass.Id, 1), HttpStatusCode.Created);
+        Assert.AreEqual(3, await TestData.GetActiveSeatsAsync(scheduledClass.Id));
+    }
+
+    [TestMethod]
     public async Task Promotion_PassExpiringTodayIsStillValid()
     {
         var (scheduledClass, holder, holderEnrollment) = await FullClassAsync(capacity: 1, holderSeats: 1);
