@@ -8,7 +8,11 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
 {
     public void Configure(EntityTypeBuilder<Enrollment> builder)
     {
-        builder.ToTable("enrollments");
+        builder.ToTable("enrollments", table =>
+        {
+            table.HasCheckConstraint("ck_enrollments_seats", "seats > 0");
+            table.HasCheckConstraint("ck_enrollments_refunded_visits", "refunded_visits >= 0");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -19,6 +23,7 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.Property(x => x.Status).HasColumnName("status").IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         builder.Property(x => x.CancelledAt).HasColumnName("cancelled_at").HasColumnType("timestamp with time zone");
+        builder.Property(x => x.RefundedVisits).HasColumnName("refunded_visits").HasDefaultValue(0);
 
         builder
             .HasOne<User>()
@@ -29,5 +34,11 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
             .HasOne(x => x.Class)
             .WithMany(x => x.Enrollments)
             .HasForeignKey(x => x.ClassId);
+
+        builder
+            .HasIndex(x => new { x.ClassId, x.UserId })
+            .HasDatabaseName("ix_enrollments_active_class_user")
+            .HasFilter("status = 'active'")
+            .IncludeProperties(x => x.Seats);
     }
 }

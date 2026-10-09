@@ -8,7 +8,8 @@ public class PassConfiguration : IEntityTypeConfiguration<Pass>
 {
     public void Configure(EntityTypeBuilder<Pass> builder)
     {
-        builder.ToTable("passes");
+        builder.ToTable("passes", table =>
+            table.HasCheckConstraint("ck_passes_remaining_visits", "remaining_visits >= 0"));
 
         builder.HasKey(x => x.Id);
 
@@ -21,5 +22,7 @@ public class PassConfiguration : IEntityTypeConfiguration<Pass>
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(x => x.UserId);
+
+        builder.HasIndex(x => x.UserId).IsUnique();
     }
 }

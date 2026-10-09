@@ -25,7 +25,7 @@ public class RedisCacheService : ICacheService
             return default;
         }
 
-        return JsonSerializer.Deserialize<T>(value!, SerializerOptions);
+        return JsonSerializer.Deserialize<T>(value.ToString(), SerializerOptions);
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan? ttl = null, CancellationToken ct = default)

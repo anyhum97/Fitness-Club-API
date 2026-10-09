@@ -25,6 +25,16 @@ public class ClassConfiguration : IEntityTypeConfiguration<Class>
             .WithMany()
             .HasForeignKey(x => x.RoomId);
 
+        builder
+            .HasIndex(x => new { x.StartsAt, x.Id })
+            .HasDatabaseName("ix_classes_scheduled_starts_at")
+            .HasFilter("is_cancelled = false");
+
+        builder
+            .HasIndex(x => new { x.RoomId, x.StartsAt, x.Id })
+            .HasDatabaseName("ix_classes_scheduled_room_starts_at")
+            .HasFilter("is_cancelled = false");
+
         builder.HasQueryFilter(x => !x.IsCancelled);
     }
 }

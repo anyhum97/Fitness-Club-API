@@ -160,6 +160,10 @@ public static class DatabaseSeeder
                 pass.RemainingVisits -= seats;
             }
 
+            var cancelledAt = cancelled
+                ? CancelledBetween(createdAt, scheduledClass.StartsAt, random)
+                : (DateTime?)null;
+
             enrollments.Add(new Enrollment
             {
                 UserId = user.Id,
@@ -167,9 +171,10 @@ public static class DatabaseSeeder
                 Seats = seats,
                 Status = cancelled ? "cancelled" : "active",
                 CreatedAt = createdAt,
-                CancelledAt = cancelled
-                    ? CancelledBetween(createdAt, scheduledClass.StartsAt, random)
-                    : null
+                CancelledAt = cancelledAt,
+                RefundedVisits = cancelledAt.HasValue
+                    ? RefundedOnCancellation(scheduledClass, seats, cancelledAt.Value)
+                    : 0
             });
         }
 
@@ -268,6 +273,13 @@ public static class DatabaseSeeder
         var offset = TimeSpan.FromHours(random.Next(1, 48));
 
         return createdAt + (offset < window ? offset : window * 0.5);
+    }
+
+    private static int RefundedOnCancellation(Class scheduledClass, int seats, DateTime cancelledAt)
+    {
+        return scheduledClass.IsCancelled || scheduledClass.StartsAt - cancelledAt >= TimeSpan.FromHours(2)
+            ? seats
+            : 0;
     }
 
     private static Pass? FindDonor(List<Pass> passes, DateOnly today, int seats, ref int position)

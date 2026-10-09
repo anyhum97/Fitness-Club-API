@@ -1,5 +1,6 @@
 using Npgsql;
 using StackExchange.Redis;
+using WebApi.Tests.Infrastructure;
 
 namespace WebApi.Tests;
 
@@ -59,6 +60,8 @@ public static class TestDatabase
     [AssemblyCleanup]
     public static async Task CleanupAsync()
     {
+        await TestApp.DisposeAsync();
+
         if (_databaseName == null)
         {
             return;
